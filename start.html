@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>NATPAC Smart Travel Tracker - Start</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{
+  background:#0f2027;
+  color:white;
+  font-family:Arial;
+  text-align:center;
+}
+.card{
+  background:white;
+  color:black;
+  width:90%;
+  max-width:400px;
+  margin:40px auto;
+  padding:20px;
+  border-radius:15px;
+}
+.map-wrap{
+  width:95%;
+  max-width:1000px;
+  margin:20px auto;
+}
+#map{
+  height: 420px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+}
+.popup{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+}
+.popup-box{
+  background:white;
+  color:black;
+  width:85%;
+  max-width:350px;
+  margin:100px auto;
+  padding:20px;
+  border-radius:15px;
+}
+button{
+  padding:10px;
+  margin:5px;
+  border:none;
+  border-radius:10px;
+}
+.yes{background:#2ecc71;color:white;}
+.no{background:#e74c3c;color:white;}
+</style>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+</head>
+
+<body onload="startMonitoring()">
+
+<header class="w-full bg-gradient-to-r from-emerald-500/20 via-cyan-500/20 to-indigo-500/20 py-6 shadow-inner">
+  <h2 class="text-3xl md:text-4xl font-bold tracking-tight">🚍 Start Trip</h2>
+  <p class="mt-2 text-white/80">Auto-detect trips and visualize your live movement.</p>
+  <a href="/history" class="inline-block mt-3 text-sm underline text-white/90">View Trip History →</a>
+</header>
+
+<div class="card bg-white/95 text-gray-900 backdrop-blur-xl border border-white/20 shadow-2xl">
+  <div class="text-left">
+    <p class="text-sm uppercase tracking-wide text-gray-500">Live Coordinates</p>
+    <div class="mt-2 grid grid-cols-2 gap-4">
+      <div class="rounded-lg bg-gray-100 px-3 py-2"><span class="text-xs text-gray-500">Lat</span><div class="text-lg font-semibold"><span id="lat">--</span></div></div>
+      <div class="rounded-lg bg-gray-100 px-3 py-2"><span class="text-xs text-gray-500">Lon</span><div class="text-lg font-semibold"><span id="lon">--</span></div></div>
+    </div>
+    <p class="mt-3 text-sm"><span class="px-2 py-1 rounded bg-emerald-100 text-emerald-700" id="status">Waiting for movement</span></p>
+  </div>
+</div>
+
+<div class="map-wrap">
+  <div id="map" class="ring-1 ring-white/20"></div>
+  <p class="opacity-80 mt-2">Live location path will appear in blue. Saved trips are shown as markers.</p>
+  <div class="mt-3 flex items-center justify-center gap-2">
+    <button class="yes hover:brightness-110 active:brightness-95" onclick="loadTrips()">Refresh Saved Trips</button>
+    <button class="no hover:brightness-110 active:brightness-95" onclick="clearSavedTrips()">Clear Saved Trip Markers</button>
+  </div>
+  <div id="tripCount" class="mt-1 opacity-85"></div>
+</div>
+
+<div class="popup" id="popup">
+  <div class="popup-box">
+    <h3>Trip Detected</h3>
+    <p>Detected Mode: <b id="detectedMode"></b></p>
+    <p>Is this correct?</p>
+
+    <button class="yes" onclick="confirmMode(true)">Yes</button>
+    <button class="no" onclick="showManual()">No</button>
+
+    <div id="manual" style="display:none">
+      <select id="mode">
+        <option>Bus</option>
+        <option>Car</option>
+        <option>Bike</option>
+        <option>Walk</option>
+      </select><br><br>
+
+      <select id="purpose">
+        <option>Work</option>
+        <option>Education</option>
+        <option>Shopping</option>
+      </select><br><br>
+
+      <input id="cost" type="number" placeholder="Cost ₹"><br><br>
+
+      <button onclick="confirmMode(false)">Submit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let watchId;
+let tripActive=false;
+let lat,lon;
+let highSpeed=0, lowSpeed=0;
+let detectedMode="";
+
+// Map state
+let map, userMarker, userPath;
+let pathCoords = [];
+let savedLayer;
+
+function startMonitoring(){
+  // Initialize map centered broadly; will fly to user once we have a fix.
+  map = L.map('map', {zoomControl: true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  userPath = L.polyline([], {color:'#3b82f6', weight:5, opacity:0.9}).addTo(map);
+  savedLayer = L.layerGroup().addTo(map);
+
+  // Set a sensible default view; will jump to user when position arrives
+  map.setView([10.0, 76.0], 6);
+  // Fix for map not rendering when container size changes
+  setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} }, 300);
+
+  watchId = navigator.geolocation.watchPosition(pos=>{
+    lat = pos.coords.latitude;
+    lon = pos.coords.longitude;
+    let speed = (pos.coords.speed || 0) * 3.6;
+
+    document.getElementById("lat").innerText = lat.toFixed(5);
+    document.getElementById("lon").innerText = lon.toFixed(5);
+
+    // Update live marker and path
+    if(!userMarker){
+      userMarker = L.marker([lat,lon]);
+      userMarker.addTo(map).bindPopup('You are here');
+      map.setView([lat,lon], 16);
+    } else {
+      userMarker.setLatLng([lat,lon]);
+    }
+    pathCoords.push([lat,lon]);
+    userPath.setLatLngs(pathCoords);
+
+    if(speed > 3){
+      highSpeed++;
+      lowSpeed=0;
+    } else {
+      lowSpeed++;
+      highSpeed=0;
+    }
+
+    if(!tripActive && highSpeed >= 10){
+      tripActive = true;
+      detectedMode = detectMode(speed);
+      document.getElementById("status").innerText="Trip started automatically";
+    }
+
+    if(tripActive && lowSpeed >= 20){
+      tripActive=false;
+      navigator.geolocation.clearWatch(watchId);
+      document.getElementById("detectedMode").innerText=detectedMode;
+      document.getElementById("popup").style.display="block";
+    }
+  }, err=>{
+    alert("Location error");
+    // Keep a default view if geolocation is blocked
+    try { map.setView([10.0, 76.0], 6); } catch(e) {}
+  }, {enableHighAccuracy:true});
+
+  // Load saved trips initially
+  loadTrips();
+}
+
+function detectMode(speed){
+  if(speed<=5) return "Walk";
+  if(speed<=15) return "Cycle";
+  if(speed<=35) return "Bike";
+  return "Car / Bus";
+}
+
+function showManual(){
+  document.getElementById("manual").style.display="block";
+}
+
+function confirmMode(correct){
+  let mode = correct ? detectedMode : document.getElementById("mode").value;
+
+  fetch("/saveTrip",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      latitude:lat,
+      longitude:lon,
+      mode:mode,
+      purpose:document.getElementById("purpose")?.value || "Unknown",
+      cost:document.getElementById("cost")?.value || 0
+    })
+  }).then(()=>{
+    alert("Trip saved ✅");
+    document.getElementById("popup").style.display="none";
+    // Refresh saved trips layer
+    loadTrips();
+  });
+}
+
+function clearSavedTrips(){
+  if(savedLayer){ savedLayer.clearLayers(); }
+  document.getElementById('tripCount').innerText = '';
+}
+
+function loadTrips(){
+  fetch('/trips_geo')
+    .then(r=>r.json())
+    .then(geo=>{
+      clearSavedTrips();
+      const layer = L.geoJSON(geo, {
+        pointToLayer: (feature, latlng)=>{
+          return L.circleMarker(latlng, {
+            radius: 7,
+            color: '#111827',
+            weight: 1,
+            fillColor: '#10b981',
+            fillOpacity: 0.9
+          });
+        },
+        onEachFeature: (feature, layer)=>{
+          const p = feature.properties || {};
+          layer.bindPopup(`Mode: <b>${p.mode||'-'}</b><br>Purpose: ${p.purpose||'-'}<br>Cost: ₹${p.cost||0}`);
+        }
+      });
+      savedLayer.addLayer(layer);
+      document.getElementById('tripCount').innerText = `Loaded ${geo.features?.length||0} saved trips`;
+    })
+    .catch(()=>{
+      // ignore errors in UI, keep page functional
+    });
+}
+</script>
+
+</body>
+</html>

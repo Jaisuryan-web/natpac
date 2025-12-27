@@ -1,159 +1,231 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>NATPAC Smart Travel Tracker</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{
-  background:#0f2027;
-  color:white;
-  font-family:Arial;
-  text-align:center;
-}
-.card{
-  background:white;
-  color:black;
-  width:90%;
-  max-width:400px;
-  margin:40px auto;
-  padding:20px;
-  border-radius:15px;
-}
-.popup{
-  display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,0.6);
-}
-.popup-box{
-  background:white;
-  color:black;
-  width:85%;
-  max-width:350px;
-  margin:100px auto;
-  padding:20px;
-  border-radius:15px;
-}
-button{
-  padding:10px;
-  margin:5px;
-  border:none;
-  border-radius:10px;
-}
-.yes{background:#2ecc71;color:white;}
-.no{background:#e74c3c;color:white;}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NATPAC Smart Travel Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+  <header class="w-full py-10 text-center">
+    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight">NATPAC Smart Travel Tracker</h1>
+    <p class="mt-3 text-white/80 max-w-xl mx-auto">Track your trips automatically, visualize your route on a live map, and review history with insights.</p>
+  </header>
 
-<body onload="startMonitoring()">
-
-<h2>🚍 NATPAC Travel Tracker</h2>
-
-<div class="card">
-  <p>Latitude: <span id="lat">--</span></p>
-  <p>Longitude: <span id="lon">--</span></p>
-  <p>Status: <span id="status">Waiting for movement</span></p>
-</div>
-
-<div class="popup" id="popup">
-  <div class="popup-box">
-    <h3>Trip Detected</h3>
-    <p>Detected Mode: <b id="detectedMode"></b></p>
-    <p>Is this correct?</p>
-
-    <button class="yes" onclick="confirmMode(true)">Yes</button>
-    <button class="no" onclick="showManual()">No</button>
-
-    <div id="manual" style="display:none">
-      <select id="mode">
-        <option>Bus</option>
-        <option>Car</option>
-        <option>Bike</option>
-        <option>Walk</option>
-      </select><br><br>
-
-      <select id="purpose">
-        <option>Work</option>
-        <option>Education</option>
-        <option>Shopping</option>
-      </select><br><br>
-
-      <input id="cost" type="number" placeholder="Cost ₹"><br><br>
-
-      <button onclick="confirmMode(false)">Submit</button>
+  <main class="max-w-5xl mx-auto px-4">
+    <div class="mb-8 rounded-2xl p-6 bg-white/5 ring-1 ring-white/10">
+      <h2 class="text-2xl font-semibold mb-3">Plan a Trip</h2>
+      <form id="planForm" class="grid md:grid-cols-[1fr,1fr,auto,auto] gap-3 items-end">
+        <div>
+          <label class="block text-sm text-white/70 mb-1">From</label>
+          <input id="fromInput" type="text" placeholder="Coimbatore" class="w-full px-3 py-2 rounded bg-white/10 ring-1 ring-white/20 placeholder-white/50 focus:outline-none" required />
+        </div>
+        <div>
+          <label class="block text-sm text-white/70 mb-1">To</label>
+          <input id="toInput" type="text" placeholder="Chennai" class="w-full px-3 py-2 rounded bg-white/10 ring-1 ring-white/20 placeholder-white/50 focus:outline-none" required />
+        </div>
+        <div>
+          <label class="block text-sm text-white/70 mb-1">Mode</label>
+          <select id="profileSelect" class="w-full px-3 py-2 rounded bg-white/10 ring-1 ring-white/20 focus:outline-none">
+            <option value="auto" selected>Auto</option>
+            <option value="driving">Driving</option>
+            <option value="cycling">Cycling</option>
+            <option value="walking">Walking</option>
+            <option value="air">Air</option>
+          </select>
+        </div>
+        <button class="px-4 py-2 rounded bg-emerald-600 hover:brightness-110 text-white">Show on Map</button>
+      </form>
+      <div id="planError" class="text-rose-400 text-sm mt-2 hidden"></div>
+      <div id="planMapWrap" class="mt-4 hidden">
+        <div id="planMap" class="h-[320px] rounded-xl ring-1 ring-white/10"></div>
+        <div id="planHint" class="mt-2 text-amber-300 text-sm hidden"></div>
+      </div>
     </div>
-  </div>
-</div>
+    <div class="grid md:grid-cols-2 gap-6">
+      <a href="/start" class="block rounded-2xl p-6 bg-white/5 ring-1 ring-white/10 hover:bg-white/10 transition">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">▶️</span>
+          <h2 class="text-2xl font-semibold">Start Trip</h2>
+        </div>
+        <p class="mt-2 text-white/80">Open the live map, auto-detect your mode, and save trip details.</p>
+      </a>
+      <a href="/history" class="block rounded-2xl p-6 bg-white/5 ring-1 ring-white/10 hover:bg-white/10 transition">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">📜</span>
+          <h2 class="text-2xl font-semibold">Trip History</h2>
+        </div>
+        <p class="mt-2 text-white/80">Browse saved trips on a map and list. Clear history anytime.</p>
+      </a>
+    </div>
 
-<script>
-let watchId;
-let tripActive=false;
-let lat,lon;
-let highSpeed=0, lowSpeed=0;
-let detectedMode="";
+    <div class="mt-10 grid md:grid-cols-3 gap-4 text-center">
+      <div class="p-4 rounded-xl bg-white/5 ring-1 ring-white/10">
+        <div class="text-3xl">🗺️</div>
+        <div class="font-semibold mt-2">Interactive Maps</div>
+        <div class="text-white/70 text-sm">Leaflet-powered map with live path and markers.</div>
+      </div>
+      <div class="p-4 rounded-xl bg-white/5 ring-1 ring-white/10">
+        <div class="text-3xl">🤖</div>
+        <div class="font-semibold mt-2">Auto Mode Detect</div>
+        <div class="text-white/70 text-sm">Heuristics infer Walk/Cycle/Bike/Car.</div>
+      </div>
+      <div class="p-4 rounded-xl bg-white/5 ring-1 ring-white/10">
+        <div class="text-3xl">📊</div>
+        <div class="font-semibold mt-2">History & Insights</div>
+        <div class="text-white/70 text-sm">View, filter, and clear your history.</div>
+      </div>
+    </div>
+  </main>
 
-function startMonitoring(){
-  watchId = navigator.geolocation.watchPosition(pos=>{
-    lat = pos.coords.latitude;
-    lon = pos.coords.longitude;
-    let speed = (pos.coords.speed || 0) * 3.6;
-
-    document.getElementById("lat").innerText = lat.toFixed(5);
-    document.getElementById("lon").innerText = lon.toFixed(5);
-
-    if(speed > 3){
-      highSpeed++;
-      lowSpeed=0;
-    } else {
-      lowSpeed++;
-      highSpeed=0;
+  <footer class="mt-12 py-6 text-center text-white/60">© NATPAC</footer>
+  <script>
+  let planMap, planLayer, planRouteLayer;
+  function ensurePlanMap(){
+    if(planMap) return;
+    planMap = L.map('planMap');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap' }).addTo(planMap);
+    planLayer = L.layerGroup().addTo(planMap);
+    planMap.setView([11, 78], 6);
+    setTimeout(()=>{ try{ planMap.invalidateSize(); }catch(e){} }, 200);
+  }
+  async function geocodeOne(q){
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`;
+    const r = await fetch(url, {headers:{'Accept':'application/json'}});
+    const j = await r.json();
+    return j && j[0] ? {lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon), display: j[0].display_name} : null;
+  }
+  async function planSubmit(e){
+    e.preventDefault();
+    const fromQ = document.getElementById('fromInput').value.trim();
+    const toQ = document.getElementById('toInput').value.trim();
+    const profileSel = document.getElementById('profileSelect').value;
+    const err = document.getElementById('planError');
+    err.classList.add('hidden');
+    try{
+      const [fromRes, toRes] = await Promise.all([geocodeOne(fromQ), geocodeOne(toQ)]);
+      if(!fromRes || !toRes){
+        err.textContent = 'Could not locate one or both places. Try being more specific.';
+        err.classList.remove('hidden');
+        return;
+      }
+      document.getElementById('planMapWrap').classList.remove('hidden');
+      ensurePlanMap();
+      planLayer.clearLayers();
+      const a = L.marker([fromRes.lat, fromRes.lon]).bindPopup('From: '+fromRes.display);
+      const b = L.marker([toRes.lat, toRes.lon]).bindPopup('To: '+toRes.display);
+      planLayer.addLayer(a).addLayer(b);
+      // Decide mode and draw route
+      const hint = document.getElementById('planHint');
+      hint.classList.add('hidden');
+      const start = [fromRes.lat, fromRes.lon];
+      const end = [toRes.lat, toRes.lon];
+      let chosen = profileSel;
+      if(profileSel === 'auto'){
+        chosen = await decideModeAuto(start, end);
+        if(chosen === 'air'){
+          hint.innerText = 'Long distance with airports nearby detected. Showing Air route ✈️';
+          hint.classList.remove('hidden');
+        }
+      }
+      if(chosen === 'air'){
+        await drawRouteAir(start, end);
+      } else {
+        const osrmProfile = (chosen === 'walking') ? 'walking' : (chosen === 'cycling' ? 'cycling' : 'driving');
+        await drawRouteOSRM(start, end, osrmProfile);
+      }
+    }catch(ex){
+      err.textContent = 'Failed to contact geocoding service. Please try again later.';
+      err.classList.remove('hidden');
     }
-
-    if(!tripActive && highSpeed >= 10){
-      tripActive = true;
-      detectedMode = detectMode(speed);
-      document.getElementById("status").innerText="Trip started automatically";
+  }
+  async function drawRouteOSRM(start, end, profile){
+    // OSRM expects lon,lat order
+    const prof = profile || 'driving';
+    const url = `https://router.project-osrm.org/route/v1/${prof}/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
+    const r = await fetch(url);
+    const j = await r.json();
+    if(!j || !j.routes || !j.routes[0]){
+      // fallback: simple straight line if routing fails
+      const fallback = L.polyline([start, end], {color:'#f59e0b', weight:4, dashArray:'6,6'});
+      if(planRouteLayer){ planMap.removeLayer(planRouteLayer); }
+      planRouteLayer = fallback.addTo(planMap);
+      try{ planMap.fitBounds(fallback.getBounds(), {padding:[20,20]}); }catch(e){}
+      return;
     }
-
-    if(tripActive && lowSpeed >= 20){
-      tripActive=false;
-      navigator.geolocation.clearWatch(watchId);
-      document.getElementById("detectedMode").innerText=detectedMode;
-      document.getElementById("popup").style.display="block";
+    const route = j.routes[0];
+    const coords = route.geometry.coordinates.map(([lon,lat])=>[lat,lon]);
+    const color = prof==='cycling' ? '#06b6d4' : (prof==='walking' ? '#a78bfa' : '#22c55e');
+    const poly = L.polyline(coords, {color, weight:5, opacity:0.9});
+    if(planRouteLayer){ planMap.removeLayer(planRouteLayer); }
+    planRouteLayer = poly.addTo(planMap);
+    try{ planMap.fitBounds(poly.getBounds(), {padding:[20,20]}); }catch(e){}
+    // Show distance/duration
+    const km = (route.distance/1000).toFixed(1);
+    const min = Math.round(route.duration/60);
+    let info = document.getElementById('planInfo');
+    if(!info){
+      info = document.createElement('div');
+      info.id = 'planInfo';
+      info.className = 'mt-2 text-white/80 text-sm';
+      document.getElementById('planMapWrap').appendChild(info);
     }
-  }, err=>alert("Location error"), {enableHighAccuracy:true});
-}
-
-function detectMode(speed){
-  if(speed<=5) return "Walk";
-  if(speed<=15) return "Cycle";
-  if(speed<=35) return "Bike";
-  return "Car / Bus";
-}
-
-function showManual(){
-  document.getElementById("manual").style.display="block";
-}
-
-function confirmMode(correct){
-  let mode = correct ? detectedMode : document.getElementById("mode").value;
-
-  fetch("http://127.0.0.1:5000/saveTrip",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      latitude:lat,
-      longitude:lon,
-      mode:mode,
-      purpose:document.getElementById("purpose")?.value || "Unknown",
-      cost:document.getElementById("cost")?.value || 0
-    })
-  }).then(()=>{
-    alert("Trip saved ✅");
-    document.getElementById("popup").style.display="none";
+    const label = prof==='cycling' ? 'cycling' : (prof==='walking' ? 'walking' : 'driving');
+    info.textContent = `Estimated distance: ${km} km • Duration: ${min} min (${label})`;
+  }
+  function haversineKm(a, b){
+    const R=6371; const toRad = d=>d*Math.PI/180;
+    const dLat = toRad(b[0]-a[0]); const dLon = toRad(b[1]-a[1]);
+    const lat1 = toRad(a[0]); const lat2 = toRad(b[0]);
+    const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+    return 2*R*Math.asin(Math.sqrt(x));
+  }
+  async function airportsNear(coord){
+    const [lat,lon] = coord;
+    const query = `[out:json][timeout:10];node(around:50000,${lat},${lon})[aeroway=aerodrome];out 1;`;
+    const r = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body: query});
+    const j = await r.json();
+    return (j && j.elements && j.elements.length>0);
+  }
+  async function decideModeAuto(start, end){
+    const dist = haversineKm(start, end);
+    if(dist > 250){
+      try{
+        const [hasA, hasB] = await Promise.all([airportsNear(start), airportsNear(end)]);
+        if(hasA && hasB) return 'air';
+      }catch(e){ /* ignore detection errors */ }
+    }
+    return 'driving';
+  }
+  async function drawRouteAir(start, end){
+    const poly = L.polyline([start,end], {color:'#2563eb', weight:4, dashArray:'4,8'});
+    if(planRouteLayer){ planMap.removeLayer(planRouteLayer); }
+    planRouteLayer = poly.addTo(planMap);
+    try{ planMap.fitBounds(poly.getBounds(), {padding:[20,20]}); }catch(e){}
+    const km = haversineKm(start,end).toFixed(1);
+    const min = Math.round((km/800)*60); // assume 800 km/h average
+    let info = document.getElementById('planInfo');
+    if(!info){
+      info = document.createElement('div');
+      info.id = 'planInfo';
+      info.className = 'mt-2 text-white/80 text-sm';
+      document.getElementById('planMapWrap').appendChild(info);
+    }
+    info.textContent = `Estimated distance: ${km} km • Duration: ${min} min (air)`;
+  }
+  document.getElementById('planForm').addEventListener('submit', planSubmit);
+  window.addEventListener('load', ()=>{
+    // Optional: gently prompt for from/to on first load
+    const from = new URLSearchParams(location.search).get('from');
+    const to = new URLSearchParams(location.search).get('to');
+    if(from && to){
+      document.getElementById('fromInput').value = from;
+      document.getElementById('toInput').value = to;
+      document.getElementById('planForm').dispatchEvent(new Event('submit'));
+    }
   });
-}
-</script>
-
+  </script>
 </body>
 </html>
