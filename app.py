@@ -7,7 +7,7 @@ CORS(app)
 
 db = mysql.connector.connect(
     host="localhost",
-    user="root",
+    user="natpac",
     password="root123",     # change if needed
     database="natpac_travel"
 )
@@ -115,3 +115,4 @@ def trips_geo():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
