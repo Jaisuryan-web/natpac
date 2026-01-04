@@ -62,7 +62,7 @@ def trips():
         params.append(end_date)
     base = "SELECT * FROM trips"
     if where:
-        base += " WHERE " + " AND ".join(where)
+        base += "WHERE" + " AND ".join(where)
     base += " ORDER BY id DESC LIMIT 500"
     cursor.execute(base, params)
     rows = cursor.fetchall()
@@ -115,5 +115,6 @@ def trips_geo():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
