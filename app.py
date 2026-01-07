@@ -44,6 +44,7 @@ def save_trip():
     )
 
     cursor.execute(query, values)
+    db.commit()
     
 
     return jsonify({"status": "saved"})
@@ -115,6 +116,7 @@ def trips_geo():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
